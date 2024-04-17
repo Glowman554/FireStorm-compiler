@@ -1,0 +1,384 @@
+package bytecode
+
+import (
+	"FireStorm/firestorm/parser"
+	"FireStorm/firestorm/utils"
+	"fmt"
+	"strconv"
+)
+
+type Bytecode struct {
+	global    *parser.Node
+	clabel    int
+	functions []*CompiledFunction
+}
+
+func NewBytecode(global *parser.Node) *Bytecode {
+	return &Bytecode{
+		global:    global,
+		clabel:    0,
+		functions: []*CompiledFunction{},
+	}
+}
+
+func (b *Bytecode) label() string {
+	label := strconv.Itoa(b.clabel)
+	b.clabel++
+	return label
+}
+
+func (b *Bytecode) resolveFunction(name string) *parser.Node {
+	global := b.global.Value.([]*parser.Node)
+	for i := range global {
+		if global[i].Type == parser.FUNCTION && global[i].Value.(parser.Function).Name == name {
+			return global[i]
+		}
+	}
+	return nil
+}
+
+func (b *Bytecode) emitNativeCall(f parser.Function) string {
+	if id, err := strconv.Atoi(f.Body[0].Value.(string)); err == nil {
+		return fmt.Sprintf("\tinvoke_native %d ; %s\n", id, f.Name)
+	} else {
+		return fmt.Sprintf("\tinvoke_native %s\n", f.Name)
+	}
+}
+
+func (b *Bytecode) compareToBCString(c parser.Compare) string {
+	switch c {
+	case parser.Equals:
+		return "equals"
+	case parser.NotEquals:
+		return "not_equals"
+	case parser.Less:
+		return "less"
+	case parser.LessEquals:
+		return "less_equals"
+	case parser.More:
+		return "more"
+	case parser.MoreEquals:
+		return "more_equals"
+	default:
+		panic("?")
+	}
+}
+
+func (b *Bytecode) datatypeToBCString(c parser.DataType) string {
+	switch c {
+	case parser.CHR:
+		return "chr"
+	case parser.STR:
+		return "str"
+	case parser.INT:
+		return "int"
+	default:
+		panic("?")
+	}
+}
+
+func (b *Bytecode) generateExpression(exp *parser.Node, cf *CompiledFunction) string {
+	code := ""
+
+	switch exp.Type {
+	case parser.NUMBER:
+		code += fmt.Sprintf("\tnumber %d\n", exp.Value.(int))
+	case parser.STRING:
+		code += fmt.Sprintf("\tstring \"%s\"\n", exp.Value.(string))
+	case parser.COMPARE:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += fmt.Sprintf("\t%s\n", b.compareToBCString(exp.Value.(parser.Compare)))
+	case parser.NOT:
+		code += b.generateExpression(exp.A, cf)
+		code += "\tinvert\n"
+	case parser.ADD:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += "\tadd\n"
+	case parser.SUBTRACT:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += "\tsub\n"
+	case parser.MULTIPLY:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += "\tmul\n"
+	case parser.DIVIDE:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += "\tdiv\n"
+	case parser.MODULO:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += "\tmod\n"
+	case parser.OR:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += "\tor\n"
+	case parser.AND:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += "\tand\n"
+	case parser.XOR:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += "\txor\n"
+	case parser.BIT_NOT:
+		code += b.generateExpression(exp.A, cf)
+		code += "\tnot\n"
+	case parser.SHIFT_LEFT:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += "\tshift_left\n"
+	case parser.SHIFT_RIGHT:
+		code += b.generateExpression(exp.A, cf)
+		code += b.generateExpression(exp.B, cf)
+		code += "\tshift_right\n"
+	case parser.FUNCTION_CALL:
+		fc := exp.Value.(parser.FunctionCall)
+		cf.use(fc.Name)
+
+		for i := range fc.Arguments {
+			code += b.generateExpression(fc.Arguments[i], cf)
+		}
+
+		f := b.resolveFunction(fc.Name)
+		if f == nil {
+			panic("Function " + fc.Name + " not found!")
+		}
+		if len(f.Value.(parser.Function).Arguments) != len(fc.Arguments) {
+			panic("Argument count mismatch!")
+		}
+
+		if utils.IndexOf(f.Value.(parser.Function).Attributes, parser.Assembly) >= 0 {
+			code += b.emitNativeCall(f.Value.(parser.Function))
+		} else {
+			code += fmt.Sprintf("\tinvoke %s\n", f.Value.(parser.Function).Name)
+		}
+	case parser.VARIABLE_LOOKUP:
+		code += fmt.Sprintf("\tload %s\n", exp.Value.(string))
+	case parser.VARIABLE_LOOKUP_ARRAY:
+		code += b.generateExpression(exp.A, cf)
+		code += fmt.Sprintf("\tload_indexed %s\n", exp.Value.(string))
+	default:
+		panic("Unknown " + strconv.Itoa(int(exp.Type)))
+	}
+
+	return code
+}
+
+func (b *Bytecode) generateCodeBlock(f parser.Function, block []*parser.Node, cf *CompiledFunction) string {
+	code := ""
+
+	for i := range block {
+		node := block[i]
+
+		switch node.Type {
+		case parser.VARIABLE_DECLARATION:
+			datatype := node.Value.(parser.NamedDatatype)
+			code += fmt.Sprintf("\tvariable %s %s\n", datatype.Name, b.datatypeToBCString(datatype.Type))
+
+			if node.A != nil {
+				code += b.generateExpression(node.A, cf)
+				code += fmt.Sprintf("\tassign %s\n", datatype.Name)
+			}
+		case parser.VARIABLE_ASSIGN:
+			code += b.generateExpression(node.A, cf)
+			code += fmt.Sprintf("\tassign %s\n", node.Value.(string))
+		case parser.VARIABLE_INCREASE:
+			code += fmt.Sprintf("\tincrease %s\n", node.Value.(string))
+		case parser.VARIABLE_DECREASE:
+			code += fmt.Sprintf("\tdecrease %s\n", node.Value.(string))
+		case parser.VARIABLE_ASSIGN_ARRAY:
+			code += b.generateExpression(node.A, cf)
+			code += b.generateExpression(node.B, cf)
+			code += fmt.Sprintf("\tassign_indexed %s\n", node.Value.(string))
+		case parser.FUNCTION_CALL:
+			fc := node.Value.(parser.FunctionCall)
+			cf.use(fc.Name)
+
+			for i := range fc.Arguments {
+				code += b.generateExpression(fc.Arguments[i], cf)
+			}
+
+			f := b.resolveFunction(fc.Name)
+			if f == nil {
+				panic("Function " + fc.Name + " not found!")
+			}
+			if len(f.Value.(parser.Function).Arguments) != len(fc.Arguments) {
+				panic("Argument count mismatch!")
+			}
+
+			if utils.IndexOf(f.Value.(parser.Function).Attributes, parser.Assembly) >= 0 {
+				code += b.emitNativeCall(f.Value.(parser.Function))
+			} else {
+				code += fmt.Sprintf("\tinvoke %s\n", f.Value.(parser.Function).Name)
+			}
+			code += "\tdelete\n"
+		case parser.RETURN:
+			if node.A != nil {
+				code += b.generateExpression(node.A, cf)
+			} else {
+				code += "\tnumber 0\n"
+			}
+			code += "\treturn\n"
+		case parser.IF:
+			code += b.generateExpression(node.A, cf)
+			iff := node.Value.(parser.If)
+			label := b.label()
+			if len(iff.FalseBlock) > 0 {
+				label2 := b.label()
+				code += fmt.Sprintf("\tgoto_false %s\n", label)
+				code += b.generateCodeBlock(f, iff.TrueBlock, cf)
+				code += fmt.Sprintf("\tgoto %s\n", label2)
+				code += label + ":\n"
+				code += b.generateCodeBlock(f, iff.FalseBlock, cf)
+				code += label2 + ":\n"
+			} else {
+				code += fmt.Sprintf("\tgoto_false %s\n", label)
+				code += b.generateCodeBlock(f, iff.TrueBlock, cf)
+				code += label + ":\n"
+			}
+		case parser.CONDITIONAL_LOOP:
+			loopBackLabel := b.label()
+			code += loopBackLabel + ":\n"
+			code += b.generateExpression(node.A, cf)
+			loopExitLabel := b.label()
+			code += fmt.Sprintf("\tgoto_false %s\n", loopExitLabel)
+			code += b.generateCodeBlock(f, node.Value.([]*parser.Node), cf)
+			code += fmt.Sprintf("\tgoto %s\n", loopBackLabel)
+			code += loopExitLabel + ":\n"
+		case parser.POST_CONDITIONAL_LOOP:
+			loopBackLabel := b.label()
+			code += loopBackLabel + ":\n"
+			code += b.generateCodeBlock(f, node.Value.([]*parser.Node), cf)
+			code += b.generateExpression(node.A, cf)
+			code += fmt.Sprintf("\tgoto_true %s\n", loopBackLabel)
+		case parser.LOOP:
+			label := b.label()
+			code += label + ":\n"
+			code += b.generateCodeBlock(f, node.Value.([]*parser.Node), cf)
+			code += fmt.Sprintf("\tgoto %s\n", label)
+		default:
+			panic("Unknown " + strconv.Itoa(int(node.Type)))
+		}
+	}
+
+	return code
+}
+
+func (b *Bytecode) generateFunction(f parser.Function) *CompiledFunction {
+	cf := CompiledFunction{
+		name:          f.Name,
+		code:          "",
+		usedFunctions: []string{},
+		keep:          false,
+	}
+
+	code := ""
+	afterCode := ""
+	preCode := ""
+
+	if utils.IndexOf(f.Attributes, parser.Assembly) >= 0 {
+		return nil
+	} else {
+		for i := range f.Arguments {
+			argument := f.Arguments[len(f.Arguments)-1-i]
+			isArray := "false"
+			if argument.IsArray {
+				isArray = "true"
+			}
+			code += fmt.Sprintf("\tvariable %s %s %s\n", argument.Name, b.datatypeToBCString(argument.Type), isArray)
+			code += fmt.Sprintf("\tassign %s\n", argument.Name)
+		}
+		if utils.IndexOf(f.Attributes, parser.NoReturn) >= 0 {
+			preCode += "\tnoreturn\n"
+		}
+
+		afterCode += "\tnumber 0\n"
+		afterCode += "\treturn\n"
+
+		code += b.generateCodeBlock(f, f.Body, &cf)
+
+		cf.code = fmt.Sprintf("@begin function %s\n%s:\n%s%s%s@end function\n", f.Name, f.Name, preCode, code, afterCode)
+		return &cf
+	}
+}
+
+func (b *Bytecode) keepFunction(name string) {
+	for i := range b.functions {
+		if b.functions[i].name == name {
+			if b.functions[i].keep {
+				return
+			}
+			b.functions[i].keep = true
+			for j := range b.functions[i].usedFunctions {
+				b.keepFunction(b.functions[i].usedFunctions[j])
+			}
+		}
+	}
+}
+
+func (b *Bytecode) Compile() string {
+	code := ""
+
+	tmp := b.global.Value.([]*parser.Node)
+
+	code += "@begin global\n"
+
+	for i := range tmp {
+		switch tmp[i].Type {
+		case parser.VARIABLE_DECLARATION:
+			if tmp[i].A != nil {
+				datatype := tmp[i].Value.(parser.NamedDatatype)
+				if datatype.IsArray {
+					panic("Global array initializers not supported!")
+				}
+				if tmp[i].A.Type == parser.STRING || tmp[i].A.Type == parser.NUMBER {
+					switch datatype.Type {
+					case parser.STR:
+						code += fmt.Sprintf("global %s %s \"%s\"\n", datatype.Name, b.datatypeToBCString(datatype.Type), tmp[i].A.Value.(string))
+					case parser.INT:
+						fallthrough
+					case parser.CHR:
+						code += fmt.Sprintf("global %s %s %d\n", datatype.Name, b.datatypeToBCString(datatype.Type), tmp[i].A.Value.(int))
+					}
+				} else {
+					panic("Only string and number are supported for globals!")
+				}
+			}
+		}
+	}
+
+	code += "@end global\n"
+
+	for i := range tmp {
+		switch tmp[i].Type {
+		case parser.FUNCTION:
+			f := b.generateFunction(tmp[i].Value.(parser.Function))
+			if f != nil {
+				b.functions = append(b.functions, f)
+			}
+		}
+	}
+
+	for i := range tmp {
+		switch tmp[i].Type {
+		case parser.FUNCTION:
+			if utils.IndexOf(tmp[i].Value.(parser.Function).Attributes, parser.Keep) >= 0 {
+				b.keepFunction(tmp[i].Value.(parser.Function).Name)
+			}
+		}
+	}
+
+	b.keepFunction("spark")
+
+	for i := range b.functions {
+		if b.functions[i].keep {
+			code += b.functions[i].code
+		}
+	}
+
+	return code
+}

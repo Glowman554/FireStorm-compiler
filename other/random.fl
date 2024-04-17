@@ -1,0 +1,15 @@
+$use <stdlib@1.0.1>
+$use <random@1.0.2>
+
+$include <std.fl>
+$include <random.fl>
+
+function spark(int argc, str[] argv) -> int {
+    random_seed_dev_random();
+
+    for int i = 0; i < 100; i++ {
+        printi(random());
+    }
+
+    return 0;
+}

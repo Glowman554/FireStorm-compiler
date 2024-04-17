@@ -1,0 +1,16 @@
+package bytecode
+
+import "FireStorm/firestorm/utils"
+
+type CompiledFunction struct {
+	name          string
+	code          string
+	usedFunctions []string
+	keep          bool
+}
+
+func (c *CompiledFunction) use(name string) {
+	if utils.IndexOf(c.usedFunctions, name) == -1 {
+		c.usedFunctions = append(c.usedFunctions, name)
+	}
+}

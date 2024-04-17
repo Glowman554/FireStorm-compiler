@@ -1,0 +1,87 @@
+$include <std.fl>
+
+function spark(int argc, str[] argv) -> int {
+	printi(argc);
+	prints(argv[0]);
+	if argc == 2 {
+		prints(argv[1]);
+	}
+	prints("Hello world!");
+
+    int tmp;
+    tmp = 1 + 2 * 3;
+    int tmp2 = double(10 + tmp, return10()) * (10 - 2) - return10();
+    printi(tmp2);
+
+	str test = "hallo";
+	str test2;
+	test2 = "welt";
+	prints(test);
+	prints(test2);
+
+	test = test2;
+	prints(test);
+
+	int[] array = allocate(8 * 4);
+	array[0] = 123 * 1;
+	array[1] = 123 * 2;
+	array[2] = 123 * 3;
+	array[3] = 123 * 4;
+	printi(array[0]);
+	printi(array[1]);
+	printi(array[2]);
+	printi(array[3]);
+	deallocate(array);
+
+    if 1 {
+        prints("yes sir");
+		printi(123);
+        //if ((1 + 2) > (1 + 0)) {
+        //    prints("yes sir 2");
+        //}
+    }
+
+	if 0 * 10 {
+        // prints("yes sir");
+		printi(1234);
+        //if ((1 + 2) > (1 + 0)) {
+        //    prints("yes sir 2");
+        //}
+    }
+
+    //if !((1 + 2) > (1 + 0)) {
+    //    prints("fuck");
+    //}
+
+	printi(fib(10));
+
+	chr testchr = 65;
+	printc(testchr);
+
+	test();
+
+    return 1;
+}
+
+function fib(int n) -> int {
+    if n == 0 {
+        return n;
+	}
+	if n == 1 {
+        return n;
+	}
+    return fib(n - 1) + fib(n - 2); 
+}
+
+function return10() -> int {
+    return 10;
+}
+
+function double(int a, int b) -> int {
+    return (a + b) * 2;
+}
+
+
+function(noreturn) test() -> void {
+
+}
