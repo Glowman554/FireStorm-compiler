@@ -108,7 +108,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		exec.Command(fmt.Sprintf("clang -c %s -o %s -target %s", *output+".ll", *output, target)).Wait()
+		runCommand(fmt.Sprintf("clang -c %s -o %s -target %s", *output+".ll", *output, target))
 	case "elf":
 		fallthrough
 	case "exe":
