@@ -11,6 +11,8 @@ const (
 	VOID
 	CHR
 	PTR
+    INT_32
+    INT_16
 )
 
 func GetDatatypeFromString(t string) DataType {
@@ -25,13 +27,17 @@ func GetDatatypeFromString(t string) DataType {
 		return CHR
 	case "ptr":
 		return PTR
+    case "i32":
+        return INT_32
+    case "i16":
+        return INT_16
 	default:
 		panic("Invalid datatype")
 	}
 }
 
 func IsDatatypeString(t string) bool {
-	return t == "int" || t == "str" || t == "void" || t == "chr" || t == "ptr"
+	return t == "int" || t == "str" || t == "void" || t == "chr" || t == "ptr" || t == "i32" || t == "i16"
 }
 
 func GetTokenFromDatatype(d DataType) lexer.TokenType {

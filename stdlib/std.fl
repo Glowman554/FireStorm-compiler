@@ -16,6 +16,6 @@ function do_exit(int c) -> void {
 	exit(c);
 }
 
-function main(int argc, str[] argv) -> int {
+function main(i32 argc, str[] argv) -> i32 {
     return spark(argc, argv);
 }

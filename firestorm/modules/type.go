@@ -9,7 +9,7 @@ type Module struct {
 func NewPackage(name string, version string) Module {
 	return Module{
 		Name:    name,
-		Version: name,
+		Version: version,
 		Files:   loadFileList(name, version),
 	}
 }

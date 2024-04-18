@@ -20,7 +20,6 @@ type LLVM struct {
 	module          *ir.Module
 	globalId        int
 	ptrType         types.Type
-	intType         *types.IntType
 	target          string
 }
 
@@ -31,7 +30,6 @@ func NewLLVM(global *parser.Node, target string) *LLVM {
 		functions:       make(map[string]*ir.Func),
 		globalId:        0,
 		ptrType:         types.I64,
-		intType:         types.I64,
 		target:          target,
 	}
 }
@@ -57,7 +55,7 @@ func (b *LLVM) newGlobalString(v string) value.Value {
 	str := constant.NewCharArrayFromString(v + "\x00")
 	globalStr := b.module.NewGlobalDef(id, str)
 
-	zero := constant.NewInt(b.intType, 0)
+	zero := constant.NewInt(types.I64, 0)
 	return constant.NewGetElementPtr(str.Typ, globalStr, zero, zero)
 }
 
@@ -79,31 +77,31 @@ func (b *LLVM) compareToLLVM(c parser.Compare) enum.IPred {
 	panic("?")
 }
 
+func(b*LLVM) datatypeArraySelect(d parser.UnnamedDatatype, single types.Type, array types.Type) types.Type {
+    if d.IsArray {
+        return array
+    } else {
+        return single 
+    }
+}
+
 func (b *LLVM) datatypeToLLVM(d parser.UnnamedDatatype) types.Type {
 	switch d.Type {
 	case parser.INT:
-		if d.IsArray {
-			return types.NewPointer(b.intType)
-		} else {
-			return b.intType
-		}
+        return b.datatypeArraySelect(d, types.I64, types.I64Ptr)
 	case parser.STR:
-		if d.IsArray {
-			return types.NewPointer(types.I8Ptr)
-		} else {
-			return types.I8Ptr
-		}
+        return b.datatypeArraySelect(d, types.I8Ptr, types.NewPointer(types.I8Ptr))
 	case parser.VOID:
-		return types.Void
+		return types.Void	
+	case parser.CHR:
+        return b.datatypeArraySelect(d, types.I8, types.I8Ptr)
 	case parser.PTR:
 		return b.ptrType
-	case parser.CHR:
-		if d.IsArray {
-			return types.I8Ptr
-		} else {
-			return types.I8
-		}
-	default:
+    case parser.INT_32:
+        return b.datatypeArraySelect(d, types.I32, types.I32Ptr)
+    case parser.INT_16:
+        return b.datatypeArraySelect(d, types.I16, types.I16Ptr)
+    default:
 		panic("Invalid datatype")
 	}
 }
@@ -112,15 +110,15 @@ func (b *LLVM) generateExpressionRaw(exp *parser.Node, block *ir.Block, cf *Comp
 
 	switch exp.Type {
 	case parser.NUMBER:
-		return constant.NewInt(b.intType, int64(exp.Value.(int)))
+		return constant.NewInt(types.I64, int64(exp.Value.(int)))
 	case parser.STRING:
 		return b.newGlobalString(exp.Value.(string))
 	case parser.COMPARE:
 		cmp := block.NewICmp(b.compareToLLVM(exp.Value.(parser.Compare)), b.generateExpression(exp.A, block, cf), b.generateExpression(exp.B, block, cf))
-		return block.NewZExt(cmp, b.intType)
+		return block.NewZExt(cmp, types.I64)
 	case parser.NOT:
-		cmp := block.NewICmp(enum.IPredEQ, b.generateExpression(exp.A, block, cf), constant.NewInt(b.intType, 0))
-		return block.NewZExt(cmp, b.intType)
+		cmp := block.NewICmp(enum.IPredEQ, b.generateExpression(exp.A, block, cf), constant.NewInt(types.I64, 0))
+		return block.NewZExt(cmp, types.I64)
 	case parser.ADD:
 		return block.NewAdd(b.generateExpression(exp.A, block, cf), b.generateExpression(exp.B, block, cf))
 	case parser.SUBTRACT:
@@ -138,7 +136,7 @@ func (b *LLVM) generateExpressionRaw(exp *parser.Node, block *ir.Block, cf *Comp
 	case parser.XOR:
 		return block.NewXor(b.generateExpression(exp.A, block, cf), b.generateExpression(exp.B, block, cf))
 	case parser.BIT_NOT:
-		return block.NewXor(b.generateExpression(exp.A, block, cf), constant.NewInt(b.intType, -1))
+		return block.NewXor(b.generateExpression(exp.A, block, cf), constant.NewInt(types.I64, -1))
 	case parser.SHIFT_LEFT:
 		return block.NewShl(b.generateExpression(exp.A, block, cf), b.generateExpression(exp.B, block, cf))
 	case parser.SHIFT_RIGHT:
@@ -167,7 +165,7 @@ func (b *LLVM) generateExpressionRaw(exp *parser.Node, block *ir.Block, cf *Comp
 }
 
 func (b *LLVM) generateExpression(exp *parser.Node, block *ir.Block, cf *CompiledFunction) value.Value {
-	return b.autoTypeCast(b.generateExpressionRaw(exp, block, cf), b.intType, block)
+	return b.autoTypeCast(b.generateExpressionRaw(exp, block, cf), types.I64, block)
 }
 
 func (b *LLVM) generateFunctionCall(fc parser.FunctionCall, block *ir.Block, cf *CompiledFunction) *ir.InstCall {
@@ -231,7 +229,7 @@ func (b *LLVM) generateIf(block *ir.Block, node *parser.Node, iff parser.If, cf 
 	ifAfter := b.newBlock(block)
 
 	x := b.generateExpression(node.A, block, cf)
-	cmp := block.NewICmp(enum.IPredNE, x, constant.NewInt(b.intType, 0))
+	cmp := block.NewICmp(enum.IPredNE, x, constant.NewInt(types.I64, 0))
 	block.NewCondBr(cmp, ifTrue, ifFalse)
 
 	ifTrue = b.generateCodeBlock(ifTrue, iff.TrueBlock, cf)
@@ -255,7 +253,7 @@ func (b *LLVM) generateConditionalLoop(block *ir.Block, node *parser.Node, cf *C
 	block.NewBr(loopCompare)
 
 	x := b.generateExpression(node.A, loopCompare, cf)
-	cmp := loopCompare.NewICmp(enum.IPredNE, x, constant.NewInt(b.intType, 0))
+	cmp := loopCompare.NewICmp(enum.IPredNE, x, constant.NewInt(types.I64, 0))
 	loopCompare.NewCondBr(cmp, loopBody, loopEnd)
 
 	loopBody = b.generateCodeBlock(loopBody, node.Value.([]*parser.Node), cf)
@@ -275,7 +273,7 @@ func (b *LLVM) generatePostConditionalLoop(block *ir.Block, node *parser.Node, c
 	loopBody = b.generateCodeBlock(loopBody, node.Value.([]*parser.Node), cf)
 
 	x := b.generateExpression(node.A, loopBody, cf)
-	cmp := loopBody.NewICmp(enum.IPredNE, x, constant.NewInt(b.intType, 0))
+	cmp := loopBody.NewICmp(enum.IPredNE, x, constant.NewInt(types.I64, 0))
 	if loopBody.Term == nil {
 		loopBody.NewCondBr(cmp, loopBody, loopEnd)
 	}
@@ -457,7 +455,7 @@ func (b *LLVM) Compile() string {
 				}
 				if tmp[i].A.Type == parser.STRING {
 					s := b.module.NewGlobalDef(datatype.Name+".init", constant.NewCharArrayFromString(tmp[i].A.Value.(string)+"\x00"))
-					global = b.module.NewGlobalDef(datatype.Name, constant.NewIntToPtr(constant.NewPtrToInt(s, b.intType), d))
+					global = b.module.NewGlobalDef(datatype.Name, constant.NewIntToPtr(constant.NewPtrToInt(s, types.I64), d))
 				} else if tmp[i].A.Type == parser.NUMBER {
 					global = b.module.NewGlobalDef(datatype.Name, constant.NewInt(d.(*types.IntType), int64(tmp[i].A.Value.(int))))
 				} else {
@@ -466,7 +464,7 @@ func (b *LLVM) Compile() string {
 			} else {
 				switch d := d.(type) {
 				case *types.PointerType:
-					global = b.module.NewGlobalDef(datatype.Name, constant.NewIntToPtr(constant.NewInt(b.intType, 0), d))
+					global = b.module.NewGlobalDef(datatype.Name, constant.NewIntToPtr(constant.NewInt(types.I64, 0), d))
 				case *types.IntType:
 					global = b.module.NewGlobalDef(datatype.Name, constant.NewInt(d, 0))
 				default:

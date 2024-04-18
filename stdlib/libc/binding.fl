@@ -1,6 +1,7 @@
-function(external) exit(int code) -> void;
+function(external) exit(i32 code) -> void;
 
 function(external) putchar(chr code) -> void;
+function(external) puts(str code) -> void;
 
 function(external) malloc(int n) -> ptr;
 function(external) free(ptr p) -> void;

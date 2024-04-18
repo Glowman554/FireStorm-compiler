@@ -1,0 +1,7 @@
+*.ll
+*.elf
+*.o
+*.summary
+flc
+*.exe
+.flp_token.txt
