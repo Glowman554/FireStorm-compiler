@@ -1,11 +1,16 @@
 package parser
 
-import "flc/firestorm/lexer"
+import (
+	"flc/firestorm/lexer"
+	"fmt"
+	"strconv"
+)
 
 type Compare int
 
 const (
-	More Compare = iota
+	Invalid         = -1
+	More    Compare = iota
 	Less
 	MoreEquals
 	LessEquals
@@ -13,21 +18,21 @@ const (
 	NotEquals
 )
 
-func TokenTypeToCompare(t lexer.TokenType) Compare {
+func TokenTypeToCompare(t lexer.TokenType) (Compare, error) {
 	switch t {
 	case lexer.MORE:
-		return More
+		return More, nil
 	case lexer.LESS:
-		return Less
+		return Less, nil
 	case lexer.MORE_EQUALS:
-		return MoreEquals
+		return MoreEquals, nil
 	case lexer.LESS_EQUALS:
-		return LessEquals
+		return LessEquals, nil
 	case lexer.EQUALS:
-		return Equals
+		return Equals, nil
 	case lexer.NOT_EQUALS:
-		return NotEquals
+		return NotEquals, nil
 	default:
-		panic("Invalid compare")
+		return Invalid, fmt.Errorf("Invalid compare " + strconv.Itoa(int(t)))
 	}
 }

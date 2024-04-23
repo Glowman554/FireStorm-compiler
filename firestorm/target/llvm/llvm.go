@@ -34,18 +34,28 @@ func NewLLVM(global *parser.Node, target string) *LLVM {
 	}
 }
 
-func (l *LLVM) findFunction(name string) *ir.Func {
+func (l *LLVM) error(message string, cf *CompiledFunction) {
+	if cf == nil {
+		fmt.Println("error:", message)
+	} else {
+		fmt.Println("error: (in:", cf.name+"):", message)
+	}
+	panic("Parser failed")
+}
+
+func (l *LLVM) findFunction(name string, cf *CompiledFunction) *ir.Func {
 	if f, ok := l.functions[name]; ok {
 		return f
 	}
-	panic("Function " + name + " not found!")
+	l.error("Function "+name+" not found!", cf)
+	panic("?")
 }
 
 func (l *LLVM) findVariable(name string, cf *CompiledFunction) (value.Value, types.Type) {
 	if v, ok := l.globalVariables[name]; ok {
 		return v, v.ContentType
 	}
-	return cf.findVariable(name)
+	return cf.findVariable(name, l.error)
 }
 
 func (b *LLVM) newGlobalString(v string) value.Value {
@@ -77,31 +87,31 @@ func (b *LLVM) compareToLLVM(c parser.Compare) enum.IPred {
 	panic("?")
 }
 
-func(b*LLVM) datatypeArraySelect(d parser.UnnamedDatatype, single types.Type, array types.Type) types.Type {
-    if d.IsArray {
-        return array
-    } else {
-        return single 
-    }
+func (b *LLVM) datatypeArraySelect(d parser.UnnamedDatatype, single types.Type, array types.Type) types.Type {
+	if d.IsArray {
+		return array
+	} else {
+		return single
+	}
 }
 
 func (b *LLVM) datatypeToLLVM(d parser.UnnamedDatatype) types.Type {
 	switch d.Type {
 	case parser.INT:
-        return b.datatypeArraySelect(d, types.I64, types.I64Ptr)
+		return b.datatypeArraySelect(d, types.I64, types.I64Ptr)
 	case parser.STR:
-        return b.datatypeArraySelect(d, types.I8Ptr, types.NewPointer(types.I8Ptr))
+		return b.datatypeArraySelect(d, types.I8Ptr, types.NewPointer(types.I8Ptr))
 	case parser.VOID:
-		return types.Void	
+		return types.Void
 	case parser.CHR:
-        return b.datatypeArraySelect(d, types.I8, types.I8Ptr)
+		return b.datatypeArraySelect(d, types.I8, types.I8Ptr)
 	case parser.PTR:
 		return b.ptrType
-    case parser.INT_32:
-        return b.datatypeArraySelect(d, types.I32, types.I32Ptr)
-    case parser.INT_16:
-        return b.datatypeArraySelect(d, types.I16, types.I16Ptr)
-    default:
+	case parser.INT_32:
+		return b.datatypeArraySelect(d, types.I32, types.I32Ptr)
+	case parser.INT_16:
+		return b.datatypeArraySelect(d, types.I16, types.I16Ptr)
+	default:
 		panic("Invalid datatype")
 	}
 }
@@ -169,7 +179,7 @@ func (b *LLVM) generateExpression(exp *parser.Node, block *ir.Block, cf *Compile
 }
 
 func (b *LLVM) generateFunctionCall(fc parser.FunctionCall, block *ir.Block, cf *CompiledFunction) *ir.InstCall {
-	f := b.findFunction(fc.Name)
+	f := b.findFunction(fc.Name, cf)
 
 	arguments := []value.Value{}
 	for i := range fc.Arguments {
@@ -320,7 +330,7 @@ func (b *LLVM) generateCodeBlock(block *ir.Block, body []*parser.Node, cf *Compi
 			b.generateFunctionCall(fc, block, cf)
 		case parser.RETURN:
 			if block.Term != nil {
-				panic("Block already terminated")
+				b.error("Block already terminated", cf)
 			}
 
 			if node.A != nil {
@@ -359,13 +369,14 @@ func (b *LLVM) generateFunction(f *ir.Func, af parser.Function) *CompiledFunctio
 		returnBlock:     nil,
 		returnIncomings: []*ir.Incoming{},
 		returnType:      f.Sig.RetType,
+		name:            af.Name,
 	}
 
 	declareOnly := false
 	noReturn := false
 
 	if utils.IndexOf(af.Attributes, parser.Assembly) >= 0 {
-		panic("Unsupported attribute assembly")
+		b.error("Unsupported attribute assembly", &cf)
 	} else if utils.IndexOf(af.Attributes, parser.NoReturn) >= 0 {
 		noReturn = true
 	} else if utils.IndexOf(af.Attributes, parser.External) >= 0 {
@@ -398,7 +409,7 @@ func (b *LLVM) generateFunction(f *ir.Func, af parser.Function) *CompiledFunctio
 			if f.Sig.RetType.Equal(types.Void) {
 				main.NewRet(nil)
 			} else {
-				fmt.Println("[WARNING] no return in non void function")
+				// fmt.Println("[WARNING] no return in non void function")
 				main.NewUnreachable()
 			}
 		}
@@ -415,16 +426,12 @@ func (b *LLVM) generateFunction(f *ir.Func, af parser.Function) *CompiledFunctio
 		}
 	}
 
-	fmt.Println("[DEBUG]", f.Name(), "compiled with", len(f.Sig.Params), "arguments and", len(cf.variables), "local variables")
+	// fmt.Println("[DEBUG]", f.Name(), "compiled with", len(f.Sig.Params), "arguments and", len(cf.variables), "local variables")
 
 	return &cf
 }
 
 func (b *LLVM) generateFunctionDeclaration(f parser.Function, module *ir.Module) {
-
-	if utils.IndexOf(f.Attributes, parser.Assembly) >= 0 {
-		panic("Unsupported attribute assembly")
-	}
 
 	parameters := []*ir.Param{}
 	for i := range f.Arguments {
@@ -486,7 +493,7 @@ func (b *LLVM) Compile() string {
 	for i := range tmp {
 		switch tmp[i].Type {
 		case parser.FUNCTION:
-			b.generateFunction(b.findFunction(tmp[i].Value.(parser.Function).Name), tmp[i].Value.(parser.Function))
+			b.generateFunction(b.findFunction(tmp[i].Value.(parser.Function).Name, nil), tmp[i].Value.(parser.Function))
 		}
 	}
 

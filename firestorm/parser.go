@@ -4,20 +4,24 @@ import (
 	"flc/firestorm/lexer"
 	"flc/firestorm/parser"
 	"flc/firestorm/utils"
+	"fmt"
 	"strconv"
+	"strings"
 )
 
 type Parser struct {
 	tokens  []lexer.Token
 	current *lexer.Token
 	pos     int
+	code    string
 }
 
-func NewParser(tokens []lexer.Token) Parser {
+func NewParser(tokens []lexer.Token, code string) Parser {
 	p := Parser{
 		tokens:  tokens,
 		current: nil,
 		pos:     -1,
+		code:    code,
 	}
 	p.advance()
 	return p
@@ -38,7 +42,17 @@ func (p *Parser) reverse() {
 }
 
 func (p *Parser) error(message string, pos int) {
-	panic(message)
+	errorLine := parser.FindErrorLineFile(p.code, pos)
+	fmt.Println("error:", message, "(at", errorLine.File+":"+strconv.Itoa(errorLine.Line)+":"+strconv.Itoa(errorLine.Char)+")")
+
+	fmt.Println(strings.ReplaceAll(errorLine.LineString, "\t", " "))
+
+	for i := 0; i < errorLine.Char; i++ {
+		fmt.Print(" ")
+	}
+	fmt.Println("^")
+
+	panic("Parser failed")
 }
 
 func (p *Parser) expect(tokenType lexer.TokenType) {
@@ -67,7 +81,10 @@ func (p *Parser) commaOrRparen() bool {
 
 func (p *Parser) datatypeNamed() parser.NamedDatatype {
 	if p.current.Type == lexer.ID {
-		datatype := parser.GetDatatypeFromString(p.current.Value.(string))
+		datatype, err := parser.GetDatatypeFromString(p.current.Value.(string))
+		if err != nil {
+			p.error(err.Error(), p.current.Pos)
+		}
 		p.advance()
 		if p.current.Type == lexer.LBRACKET {
 			p.advanceExpect(lexer.RBRACKET)
@@ -101,7 +118,10 @@ func (p *Parser) datatypeNamed() parser.NamedDatatype {
 
 func (p *Parser) datatypeUnnamed() parser.UnnamedDatatype {
 	if p.current.Type == lexer.ID {
-		datatype := parser.GetDatatypeFromString(p.current.Value.(string))
+		datatype, err := parser.GetDatatypeFromString(p.current.Value.(string))
+		if err != nil {
+			p.error(err.Error(), p.current.Pos)
+		}
 		p.advance()
 		if p.current.Type == lexer.LBRACKET {
 			p.advanceExpect(lexer.RBRACKET)
@@ -116,7 +136,10 @@ func (p *Parser) datatypeUnnamed() parser.UnnamedDatatype {
 				IsArray: false,
 			}
 		}
+	} else {
+		p.error("Expected id", p.current.Pos)
 	}
+
 	panic("?")
 }
 
@@ -255,7 +278,7 @@ func (p *Parser) compare() *parser.Node {
 		p.current.Type == lexer.LESS_EQUALS ||
 		p.current.Type == lexer.MORE ||
 		p.current.Type == lexer.MORE_EQUALS {
-		compare := parser.TokenTypeToCompare(p.current.Type)
+		compare, _ := parser.TokenTypeToCompare(p.current.Type)
 		p.advance()
 		result = parser.NewNode(parser.COMPARE, result, p.term(), compare)
 	}

@@ -1,6 +1,9 @@
 package parser
 
-import "flc/firestorm/lexer"
+import (
+	"flc/firestorm/lexer"
+	"fmt"
+)
 
 type DataType int
 
@@ -11,28 +14,28 @@ const (
 	VOID
 	CHR
 	PTR
-    INT_32
-    INT_16
+	INT_32
+	INT_16
 )
 
-func GetDatatypeFromString(t string) DataType {
+func GetDatatypeFromString(t string) (DataType, error) {
 	switch t {
 	case "int":
-		return INT
+		return INT, nil
 	case "str":
-		return STR
+		return STR, nil
 	case "void":
-		return VOID
+		return VOID, nil
 	case "chr":
-		return CHR
+		return CHR, nil
 	case "ptr":
-		return PTR
-    case "i32":
-        return INT_32
-    case "i16":
-        return INT_16
+		return PTR, nil
+	case "i32":
+		return INT_32, nil
+	case "i16":
+		return INT_16, nil
 	default:
-		panic("Invalid datatype")
+		return INVALID, fmt.Errorf("Invalid datatype " + t)
 	}
 }
 

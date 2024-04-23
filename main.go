@@ -54,7 +54,7 @@ func main() {
 		panic("Please specify a output and a input")
 	}
 
-	fmt.Println("[COMPILING]", *input, "->", *output)
+	// fmt.Println("[COMPILING]", *input, "->", *output)
 
 	// output := "out.ll"
 	// input := "tests/unreachable.fl"
@@ -81,7 +81,7 @@ func main() {
 
 	// // os.WriteFile("tokens.json", buffer, fs.ModePerm)
 
-	parser := firestorm.NewParser(tokens)
+	parser := firestorm.NewParser(tokens, processedCode)
 	global := parser.Global()
 
 	// // buffer, err = json.MarshalIndent(global, "", "\t")
@@ -123,7 +123,7 @@ func main() {
 }
 
 func runCommand(command string) {
-	fmt.Println("[CMD]", command)
+	// fmt.Println("[CMD]", command)
 	tmp := strings.Split(command, " ")
 
 	cmd := exec.Command(tmp[0], tmp[1:]...)

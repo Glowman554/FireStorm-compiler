@@ -36,7 +36,7 @@ func loadFileList(name string, version string) map[string]string {
 }
 
 func loadFile(name string, version string, filename string, id int) string {
-	fmt.Printf("[LOADING] %s@%s:%s\n", name, version, filename)
+	// fmt.Printf("[LOADING] %s@%s:%s\n", name, version, filename)
 
 	req, err := http.Get(fmt.Sprintf("%s/remote/get?id=%d", api, id))
 	if err != nil {
