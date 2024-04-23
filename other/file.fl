@@ -1,8 +1,11 @@
-$use <stdlib@1.0.1>
+$use <stdlib@1.0.3>
 $include <std.fl>
 
 function testFileWrite() -> void {
     int file = file_open("/tmp/test.txt", "w");
+    end {
+        file_close(file);
+    }
     if !file {
         prints("Could not open file for write!");
         do_exit(1);
@@ -10,11 +13,13 @@ function testFileWrite() -> void {
     
     str toFile = "Hello World! This is a file written from FL!";
     file_write(file, toFile, string_length(toFile), 0);
-    file_close(file);
 }
 
 function testFileRead() -> void {
     int file = file_open("/tmp/test.txt", "r");
+    end {
+        file_close(file);
+    }
     if !file {
         prints("Could not open file for read!");
         do_exit(1);
@@ -23,16 +28,17 @@ function testFileRead() -> void {
     int size = file_size(file);
 
     chr[] buffer = allocate(size);
+    end {
+        deallocate(buffer);
+    }
     file_read(file, buffer, size, 0);
-    file_close(file);
 
     int idx = 0;
     while idx < size {
         printc(buffer[idx]);
         idx++;
     }
-
-    deallocate(buffer);
+    printc(10);
 }
 
 function spark(int argc, str[] argv) -> int {

@@ -1,4 +1,4 @@
-$use <stdlib@1.0.2>
+$use <stdlib@1.0.3>
 $use <fpic@1.0.4>
 
 $include <std.fl>

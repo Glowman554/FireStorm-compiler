@@ -46,6 +46,8 @@ const (
 	OR
 	XOR
 	BIT_NOT
+
+	END_EXEC
 )
 
 type Node struct {

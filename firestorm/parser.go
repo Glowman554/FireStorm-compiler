@@ -442,6 +442,12 @@ func (p *Parser) keyword() []*parser.Node {
 		codeBlock := p.codeBlock()
 		p.expect(lexer.RBRACE)
 		return []*parser.Node{parser.NewNode(parser.LOOP, nil, nil, codeBlock)}
+	case "end":
+		p.advance()
+		p.expect(lexer.LBRACE)
+		codeBlock := p.codeBlock()
+		p.expect(lexer.RBRACE)
+		return []*parser.Node{parser.NewNode(parser.END_EXEC, nil, nil, codeBlock)}
 	default:
 		return nil
 	}

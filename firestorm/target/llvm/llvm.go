@@ -356,6 +356,8 @@ func (b *LLVM) generateCodeBlock(block *ir.Block, body []*parser.Node, cf *Compi
 			}
 
 			block = b.newBlock(block)
+		case parser.END_EXEC:
+			cf.endExec = append(cf.endExec, node.Value.([]*parser.Node)...)
 		default:
 			panic("Unknown " + strconv.Itoa(int(node.Type)))
 		}
@@ -370,6 +372,7 @@ func (b *LLVM) generateFunction(f *ir.Func, af parser.Function) *CompiledFunctio
 		returnIncomings: []*ir.Incoming{},
 		returnType:      f.Sig.RetType,
 		name:            af.Name,
+		endExec:         []*parser.Node{},
 	}
 
 	declareOnly := false
@@ -405,15 +408,21 @@ func (b *LLVM) generateFunction(f *ir.Func, af parser.Function) *CompiledFunctio
 		cf.returnBlock = ret
 
 		main = b.generateCodeBlock(main, af.Body, &cf)
+
 		if main.Term == nil {
 			if f.Sig.RetType.Equal(types.Void) {
-				main.NewRet(nil)
+				main.NewBr(ret)
+				ret = b.generateCodeBlock(ret, cf.endExec, &cf)
+				ret.NewRet(nil)
 			} else {
 				// fmt.Println("[WARNING] no return in non void function")
-				main.NewUnreachable()
+				main.NewBr(ret)
+				ret = b.generateCodeBlock(ret, cf.endExec, &cf)
+				ret.NewUnreachable()
 			}
 		}
 		if noReturn {
+			ret = b.generateCodeBlock(ret, cf.endExec, &cf)
 			b.generateFunctionCall(parser.FunctionCall{
 				Name:      "unreachable",
 				Arguments: []*parser.Node{},
@@ -421,6 +430,7 @@ func (b *LLVM) generateFunction(f *ir.Func, af parser.Function) *CompiledFunctio
 		} else {
 			if len(cf.returnIncomings) > 0 {
 				phi := ret.NewPhi(cf.returnIncomings...)
+				ret = b.generateCodeBlock(ret, cf.endExec, &cf)
 				ret.NewRet(phi)
 			}
 		}
